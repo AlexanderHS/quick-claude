@@ -20,7 +20,13 @@ Then restart your shell or `source ~/.bashrc`.
 w
 ```
 
-Arrow keys to select, Enter to confirm.
+| Key | Action |
+|-----|--------|
+| ↑/↓ | Navigate |
+| 1-9 | Quick select |
+| n | Toggle two-digit mode (for 10+) |
+| Enter | Confirm |
+| Esc | Exit |
 
 ## Configuration
 

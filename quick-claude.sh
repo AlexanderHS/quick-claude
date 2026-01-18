@@ -80,6 +80,9 @@ for ((j=total-1; j>=0; j--)); do
     sorted_dates+=("${display_dates[$i]}")
 done
 
+# Two-digit mode for selecting items 10+
+two_digit_mode=0
+
 # Function to draw menu
 draw_menu() {
     local selected=$1
@@ -91,18 +94,33 @@ draw_menu() {
 
     for ((i=0; i<total; i++)); do
         local padded_name=$(printf "%-${max_name_len}s" "${sorted_repos[$i]}")
+        local num_label
+        local num=$((i+1))
+        if [[ $two_digit_mode -eq 1 ]]; then
+            if [[ $num -lt 100 ]]; then
+                num_label="${DIM}$(printf "%2d" $num)${NC} "
+            else
+                num_label="   "
+            fi
+        else
+            if [[ $num -le 9 ]]; then
+                num_label="${DIM}${num}${NC} "
+            else
+                num_label="  "
+            fi
+        fi
         printf "\r\033[K"
         if [[ $i -eq $selected ]]; then
-            echo -e "  ${GREEN}${BOLD}>${NC} ${BOLD}${padded_name}${NC}  ${DIM}(${sorted_dates[$i]})${NC}"
+            echo -e "${num_label}${GREEN}${BOLD}>${NC} ${BOLD}${padded_name}${NC}  ${DIM}(${sorted_dates[$i]})${NC}"
         else
-            echo -e "    ${padded_name}  ${DIM}(${sorted_dates[$i]})${NC}"
+            echo -e "${num_label}  ${padded_name}  ${DIM}(${sorted_dates[$i]})${NC}"
         fi
     done
 }
 
 echo ""
 echo -e "${CYAN}${BOLD}Ready to code?${NC}"
-echo -e "${DIM}Use ↑/↓ to select, Enter to confirm:${NC}"
+echo -e "${DIM}Use ↑/↓ or 1-9 to select, n for two-digit mode:${NC}"
 echo ""
 
 current=0
@@ -134,6 +152,26 @@ while true; do
         draw_menu $current 1
     elif [[ $key == '' ]]; then
         break
+    elif [[ $key == 'n' ]]; then
+        two_digit_mode=$((1 - two_digit_mode))
+        draw_menu $current 1
+    elif [[ $two_digit_mode -eq 1 && $key =~ ^[0-9]$ ]]; then
+        printf "\r\033[K${DIM}> ${key}_${NC}"
+        read -rsn1 -t 2 key2
+        printf "\r\033[K"
+        if [[ $key2 =~ ^[0-9]$ ]]; then
+            target=$((key * 10 + key2 - 1))
+            if [[ $target -ge 0 && $target -lt $total ]]; then
+                current=$target
+                break
+            fi
+        fi
+    elif [[ $two_digit_mode -eq 0 && $key =~ ^[1-9]$ ]]; then
+        target=$((key - 1))
+        if [[ $target -lt $total ]]; then
+            current=$target
+            break
+        fi
     fi
 done
 
