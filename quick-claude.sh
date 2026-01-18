@@ -120,6 +120,13 @@ while true; do
 
     if [[ $key == $'\033' ]]; then
         read -rsn2 -t 0.1 key
+        if [[ -z $key ]]; then
+            # Bare escape pressed - exit
+            printf "\033[?25h"
+            trap - EXIT
+            echo ""
+            return 0 2>/dev/null || exit 0
+        fi
         case "$key" in
             '[A') ((current > 0)) && ((current--)) ;;
             '[B') ((current < total - 1)) && ((current++)) ;;
