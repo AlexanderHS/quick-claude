@@ -82,11 +82,13 @@ done
 
 # Two-digit mode for selecting items 10+
 two_digit_mode=0
+input_prefix=""
 
 # Function to draw menu
 draw_menu() {
     local selected=$1
     local start_line=$2
+    local prefix=$3
 
     if [[ $start_line -gt 0 ]]; then
         printf "\033[%dA" "$total"
@@ -98,7 +100,15 @@ draw_menu() {
         local num=$((i+1))
         if [[ $two_digit_mode -eq 1 ]]; then
             if [[ $num -lt 100 ]]; then
-                num_label="${DIM}$(printf "%2d" $num)${NC} "
+                local num_str=$(printf "%02d" $num)
+                local first_digit="${num_str:0:1}"
+                local second_digit="${num_str:1:1}"
+                # Highlight first digit if it matches prefix
+                if [[ -n $prefix && $first_digit == "$prefix" ]]; then
+                    num_label="${CYAN}${first_digit}${DIM}${second_digit}${NC} "
+                else
+                    num_label="${DIM}${num_str}${NC} "
+                fi
             else
                 num_label="   "
             fi
@@ -156,9 +166,8 @@ while true; do
         two_digit_mode=$((1 - two_digit_mode))
         draw_menu $current 1
     elif [[ $two_digit_mode -eq 1 && $key =~ ^[0-9]$ ]]; then
-        printf "\r\033[K${DIM}> ${key}_${NC}"
+        draw_menu $current 1 "$key"
         read -rsn1 -t 2 key2
-        printf "\r\033[K"
         if [[ $key2 =~ ^[0-9]$ ]]; then
             target=$((key * 10 + key2 - 1))
             if [[ $target -ge 0 && $target -lt $total ]]; then
@@ -166,6 +175,7 @@ while true; do
                 break
             fi
         fi
+        draw_menu $current 1
     elif [[ $two_digit_mode -eq 0 && $key =~ ^[1-9]$ ]]; then
         target=$((key - 1))
         if [[ $target -lt $total ]]; then
