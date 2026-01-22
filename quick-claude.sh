@@ -20,6 +20,11 @@ DIM='\033[2m'
 BOLD='\033[1m'
 NC='\033[0m'
 
+# Sort mode constants
+readonly SORT_BY_DATE=0
+readonly SORT_BY_NAME=1
+sort_mode=$SORT_BY_DATE
+
 # Check if repos directory exists
 if [[ ! -d "$REPOS_DIR" ]]; then
     echo -e "${YELLOW}Directory not found: $REPOS_DIR${NC}"
@@ -84,6 +89,54 @@ done
 two_digit_mode=0
 input_prefix=""
 
+# Store original arrays for re-sorting (parallel arrays: index links them)
+declare -a original_repos=("${sorted_repos[@]}")
+declare -a original_dates=("${sorted_dates[@]}")
+declare -a original_timestamps=()
+# Build timestamps in same order as sorted_repos (most recent first)
+for ((j=total-1; j>=0; j--)); do
+    i="${indices[$j]}"
+    original_timestamps+=("${dates[$i]}")
+done
+
+# Function to apply current sort mode
+apply_sort() {
+    if [[ $sort_mode -eq $SORT_BY_DATE ]]; then
+        # Sort by timestamp descending (most recent first)
+        local sort_indices=($(for i in "${!original_timestamps[@]}"; do
+            echo "$i ${original_timestamps[$i]}"
+        done | sort -k2 -nr | cut -d' ' -f1))
+
+        sorted_repos=()
+        sorted_dates=()
+        for i in "${sort_indices[@]}"; do
+            sorted_repos+=("${original_repos[$i]}")
+            sorted_dates+=("${original_dates[$i]}")
+        done
+    elif [[ $sort_mode -eq $SORT_BY_NAME ]]; then
+        # Sort alphabetically by name (case-insensitive)
+        local sort_indices=($(for i in "${!original_repos[@]}"; do
+            echo "$i ${original_repos[$i]}"
+        done | sort -k2 -f | cut -d' ' -f1))
+
+        sorted_repos=()
+        sorted_dates=()
+        for i in "${sort_indices[@]}"; do
+            sorted_repos+=("${original_repos[$i]}")
+            sorted_dates+=("${original_dates[$i]}")
+        done
+    fi
+}
+
+# Function to get sort mode label
+get_sort_label() {
+    if [[ $sort_mode -eq $SORT_BY_DATE ]]; then
+        echo "date"
+    else
+        echo "name"
+    fi
+}
+
 # Function to draw menu
 draw_menu() {
     local selected=$1
@@ -128,10 +181,16 @@ draw_menu() {
     done
 }
 
-echo ""
-echo -e "${CYAN}${BOLD}Ready to code?${NC}"
-echo -e "${DIM}Use ↑/↓ or 1-9 to select, n for two-digit mode:${NC}"
-echo ""
+# Function to draw header
+draw_header() {
+    local sort_label=$(get_sort_label)
+    echo ""
+    echo -e "${CYAN}${BOLD}Ready to code?${NC}"
+    echo -e "${DIM}Use ↑/↓ or 1-9 to select, n for two-digit mode, s to sort [${sort_label}]:${NC}"
+    echo ""
+}
+
+draw_header
 
 current=0
 draw_menu $current 0
@@ -165,6 +224,19 @@ while true; do
     elif [[ $key == 'n' ]]; then
         two_digit_mode=$((1 - two_digit_mode))
         draw_menu $current 1
+    elif [[ $key == 's' ]]; then
+        # Toggle sort mode
+        if [[ $sort_mode -eq $SORT_BY_DATE ]]; then
+            sort_mode=$SORT_BY_NAME
+        else
+            sort_mode=$SORT_BY_DATE
+        fi
+        apply_sort
+        current=0
+        # Redraw header and menu
+        printf "\033[%dA" "$((total + 4))"
+        draw_header
+        draw_menu $current 0
     elif [[ $two_digit_mode -eq 1 && $key =~ ^[0-9]$ ]]; then
         draw_menu $current 1 "$key"
         read -rsn1 -t 2 key2
