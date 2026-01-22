@@ -21,8 +21,8 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # Sort mode constants
-readonly SORT_BY_DATE=0
-readonly SORT_BY_NAME=1
+[[ -z "${SORT_BY_DATE+x}" ]] && readonly SORT_BY_DATE=0
+[[ -z "${SORT_BY_NAME+x}" ]] && readonly SORT_BY_NAME=1
 sort_mode=$SORT_BY_DATE
 
 # Check if repos directory exists
