@@ -228,6 +228,7 @@ while true; do
         # Toggle sort mode
         if [[ $sort_mode -eq $SORT_BY_DATE ]]; then
             sort_mode=$SORT_BY_NAME
+            two_digit_mode=1
         else
             sort_mode=$SORT_BY_DATE
         fi
