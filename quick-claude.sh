@@ -85,9 +85,10 @@ for ((j=total-1; j>=0; j--)); do
     sorted_dates+=("${display_dates[$i]}")
 done
 
-# Two-digit mode for selecting items 10+
-two_digit_mode=0
-input_prefix=""
+# Search state
+search_query=""
+declare -a filtered_indices=()
+filtered_total=0
 
 # Store original arrays for re-sorting (parallel arrays: index links them)
 declare -a original_repos=("${sorted_repos[@]}")
@@ -128,6 +129,25 @@ apply_sort() {
     fi
 }
 
+# Function to update filtered indices based on search query
+update_filter() {
+    filtered_indices=()
+    if [[ -z "$search_query" ]]; then
+        for ((i=0; i<total; i++)); do
+            filtered_indices+=($i)
+        done
+    else
+        local query_lower="${search_query,,}"
+        for ((i=0; i<total; i++)); do
+            local name_lower="${sorted_repos[$i],,}"
+            if [[ "$name_lower" == "$query_lower"* ]]; then
+                filtered_indices+=($i)
+            fi
+        done
+    fi
+    filtered_total=${#filtered_indices[@]}
+}
+
 # Function to get sort mode label
 get_sort_label() {
     if [[ $sort_mode -eq $SORT_BY_DATE ]]; then
@@ -141,42 +161,61 @@ get_sort_label() {
 draw_menu() {
     local selected=$1
     local start_line=$2
-    local prefix=$3
 
     if [[ $start_line -gt 0 ]]; then
         printf "\033[%dA" "$total"
     fi
 
+    # Precompute match status
+    local -a is_match=()
     for ((i=0; i<total; i++)); do
-        local padded_name=$(printf "%-${max_name_len}s" "${sorted_repos[$i]}")
-        local num_label
+        is_match[$i]=0
+    done
+    if [[ -n "$search_query" ]]; then
+        for fi_idx in "${filtered_indices[@]}"; do
+            is_match[$fi_idx]=1
+        done
+    fi
+
+    for ((i=0; i<total; i++)); do
+        local name="${sorted_repos[$i]}"
+        local padded_name=$(printf "%-${max_name_len}s" "$name")
         local num=$((i+1))
-        if [[ $two_digit_mode -eq 1 ]]; then
-            if [[ $num -lt 100 ]]; then
-                local num_str=$(printf "%02d" $num)
-                local first_digit="${num_str:0:1}"
-                local second_digit="${num_str:1:1}"
-                # Highlight first digit if it matches prefix
-                if [[ -n $prefix && $first_digit == "$prefix" ]]; then
-                    num_label="${CYAN}${first_digit}${DIM}${second_digit}${NC} "
+        local num_label
+
+        if [[ $num -le 9 ]]; then
+            num_label="${DIM}${num}${NC} "
+        else
+            num_label="  "
+        fi
+
+        printf "\r\033[K"
+
+        if [[ -n "$search_query" ]]; then
+            local qlen=${#search_query}
+            if [[ ${is_match[$i]} -eq 1 ]]; then
+                local match_part="${name:0:$qlen}"
+                local rest_name="${name:$qlen}"
+                local padding=$((max_name_len - ${#name}))
+                local pad_str=""
+                [[ $padding -gt 0 ]] && pad_str=$(printf "%${padding}s" "")
+                if [[ $i -eq $selected ]]; then
+                    # Selected match: green arrow, cyan prefix, bold rest
+                    echo -e "${num_label}${GREEN}${BOLD}>${NC} ${CYAN}${BOLD}${match_part}${NC}${BOLD}${rest_name}${NC}${pad_str}  ${DIM}(${sorted_dates[$i]})${NC}"
                 else
-                    num_label="${DIM}${num_str}${NC} "
+                    # Non-selected match: cyan prefix
+                    echo -e "${num_label}  ${CYAN}${match_part}${NC}${rest_name}${pad_str}  ${DIM}(${sorted_dates[$i]})${NC}"
                 fi
             else
-                num_label="   "
+                # Non-matching: dim everything
+                echo -e "${num_label}  ${DIM}${padded_name}  (${sorted_dates[$i]})${NC}"
             fi
         else
-            if [[ $num -le 9 ]]; then
-                num_label="${DIM}${num}${NC} "
+            if [[ $i -eq $selected ]]; then
+                echo -e "${num_label}${GREEN}${BOLD}>${NC} ${BOLD}${padded_name}${NC}  ${DIM}(${sorted_dates[$i]})${NC}"
             else
-                num_label="  "
+                echo -e "${num_label}  ${padded_name}  ${DIM}(${sorted_dates[$i]})${NC}"
             fi
-        fi
-        printf "\r\033[K"
-        if [[ $i -eq $selected ]]; then
-            echo -e "${num_label}${GREEN}${BOLD}>${NC} ${BOLD}${padded_name}${NC}  ${DIM}(${sorted_dates[$i]})${NC}"
-        else
-            echo -e "${num_label}  ${padded_name}  ${DIM}(${sorted_dates[$i]})${NC}"
         fi
     done
 }
@@ -186,10 +225,15 @@ draw_header() {
     local sort_label=$(get_sort_label)
     echo ""
     echo -e "${CYAN}${BOLD}Ready to code?${NC}"
-    echo -e "${DIM}Use ↑/↓ or 1-9 to select, n for two-digit mode, s to sort [${sort_label}]:${NC}"
+    if [[ -n "$search_query" ]]; then
+        echo -e "${DIM}Search:${NC} ${BOLD}${search_query}${NC}${DIM}▌${NC}"
+    else
+        echo -e "${DIM}Type to search, ↑/↓ 1-9 to select, / to sort [${sort_label}]:${NC}"
+    fi
     echo ""
 }
 
+update_filter
 draw_header
 
 current=0
@@ -208,53 +252,109 @@ while true; do
     if [[ $key == $'\033' ]]; then
         read -rsn2 -t 0.1 key
         if [[ -z $key ]]; then
-            # Bare escape pressed - exit
-            printf "\033[?25h"
-            trap - EXIT
-            echo ""
-            return 0 2>/dev/null || exit 0
+            # Bare escape
+            if [[ -n "$search_query" ]]; then
+                # Clear search
+                search_query=""
+                update_filter
+                current=0
+                printf "\033[%dA" "$((total + 4))"
+                draw_header
+                draw_menu $current 0
+            else
+                # Exit
+                printf "\033[?25h"
+                trap - EXIT
+                echo ""
+                return 0 2>/dev/null || exit 0
+            fi
+        else
+            case "$key" in
+                '[A')
+                    # Up arrow
+                    if [[ -n "$search_query" && $filtered_total -gt 0 ]]; then
+                        # Navigate to previous match
+                        prev=-1
+                        for ((fi=filtered_total-1; fi>=0; fi--)); do
+                            if [[ ${filtered_indices[$fi]} -lt $current ]]; then
+                                prev=${filtered_indices[$fi]}
+                                break
+                            fi
+                        done
+                        [[ $prev -ge 0 ]] && current=$prev
+                    else
+                        ((current > 0)) && ((current--))
+                    fi
+                    ;;
+                '[B')
+                    # Down arrow
+                    if [[ -n "$search_query" && $filtered_total -gt 0 ]]; then
+                        # Navigate to next match
+                        next=-1
+                        for ((fi=0; fi<filtered_total; fi++)); do
+                            if [[ ${filtered_indices[$fi]} -gt $current ]]; then
+                                next=${filtered_indices[$fi]}
+                                break
+                            fi
+                        done
+                        [[ $next -ge 0 ]] && current=$next
+                    else
+                        ((current < total - 1)) && ((current++))
+                    fi
+                    ;;
+            esac
+            draw_menu $current 1
         fi
-        case "$key" in
-            '[A') ((current > 0)) && ((current--)) ;;
-            '[B') ((current < total - 1)) && ((current++)) ;;
-        esac
-        draw_menu $current 1
     elif [[ $key == '' ]]; then
-        break
-    elif [[ $key == 'n' ]]; then
-        two_digit_mode=$((1 - two_digit_mode))
-        draw_menu $current 1
-    elif [[ $key == 's' ]]; then
+        # Enter - select current (only if valid)
+        if [[ -z "$search_query" || $filtered_total -gt 0 ]]; then
+            break
+        fi
+    elif [[ $key == '/' ]]; then
         # Toggle sort mode
         if [[ $sort_mode -eq $SORT_BY_DATE ]]; then
             sort_mode=$SORT_BY_NAME
-            two_digit_mode=1
         else
             sort_mode=$SORT_BY_DATE
         fi
         apply_sort
+        search_query=""
+        update_filter
         current=0
-        # Redraw header and menu
         printf "\033[%dA" "$((total + 4))"
         draw_header
         draw_menu $current 0
-    elif [[ $two_digit_mode -eq 1 && $key =~ ^[0-9]$ ]]; then
-        draw_menu $current 1 "$key"
-        read -rsn1 -t 2 key2
-        if [[ $key2 =~ ^[0-9]$ ]]; then
-            target=$((key * 10 + key2 - 1))
-            if [[ $target -ge 0 && $target -lt $total ]]; then
-                current=$target
-                break
+    elif [[ $key == $'\177' || $key == $'\b' ]]; then
+        # Backspace - remove last search character
+        if [[ -n "$search_query" ]]; then
+            search_query="${search_query%?}"
+            update_filter
+            if [[ -n "$search_query" && $filtered_total -gt 0 ]]; then
+                current=${filtered_indices[0]}
+            elif [[ -z "$search_query" ]]; then
+                current=0
             fi
+            printf "\033[%dA" "$((total + 4))"
+            draw_header
+            draw_menu $current 0
         fi
-        draw_menu $current 1
-    elif [[ $two_digit_mode -eq 0 && $key =~ ^[1-9]$ ]]; then
+    elif [[ -z "$search_query" && $key =~ ^[1-9]$ ]]; then
+        # Number shortcut (only when not searching)
         target=$((key - 1))
         if [[ $target -lt $total ]]; then
             current=$target
             break
         fi
+    elif [[ $key =~ ^[a-zA-Z0-9._-]$ ]]; then
+        # Type-to-search: append character to search query
+        search_query+="$key"
+        update_filter
+        if [[ $filtered_total -gt 0 ]]; then
+            current=${filtered_indices[0]}
+        fi
+        printf "\033[%dA" "$((total + 4))"
+        draw_header
+        draw_menu $current 0
     fi
 done
 
