@@ -22,11 +22,13 @@ w
 
 | Key | Action |
 |-----|--------|
-| ↑/↓ | Navigate |
-| 1-9 | Quick select |
-| n | Toggle two-digit mode (for 10+) |
-| Enter | Confirm |
-| Esc | Exit |
+| a-z | Type to search (auto-selects on single match) |
+| ↑/↓ | Navigate (skips between matches when searching) |
+| 1-9 | Quick select (when not searching) |
+| / | Toggle sort: date / name |
+| Backspace | Delete last search character |
+| Enter | Confirm selection |
+| Esc | Clear search, or exit if not searching |
 
 ## Configuration
 

@@ -17,6 +17,8 @@ quick-claude is a bash-based interactive launcher that displays a list of reposi
 
 - Uses ANSI escape codes for colors and cursor control
 - Hides cursor during menu navigation, restores on exit via trap
-- Escape key exits the menu without selection
+- **Type-to-search**: letters filter repos by case-insensitive prefix match; auto-selects when narrowed to one match
+- `/` toggles sort between date (default) and name; `1-9` quick-select when not searching
+- Escape clears search first, then exits on second press
 - Git repos show last commit date; non-git directories show "not git"
 - Cross-platform date handling (GNU and BSD `stat`/`date` variants)
