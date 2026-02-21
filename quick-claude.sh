@@ -349,7 +349,11 @@ while true; do
         # Type-to-search: append character to search query
         search_query+="$key"
         update_filter
-        if [[ $filtered_total -gt 0 ]]; then
+        if [[ $filtered_total -eq 1 ]]; then
+            # Exact single match - auto-select
+            current=${filtered_indices[0]}
+            break
+        elif [[ $filtered_total -gt 0 ]]; then
             current=${filtered_indices[0]}
         fi
         printf "\033[%dA" "$((total + 4))"
